@@ -1,115 +1,140 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { StatusBar, View, Button } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 export default function App() {
-  const webViewRef = useRef(null);
+  const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
-  // NUCLEAR ANTI-SHORTS SCRIPT
-  const antiShortsScript = `
+  // FINAL KILL SCRIPT
+  const FINAL_KILL_SCRIPT = `
     (function() {
       'use strict';
 
-      // Force hide + remove Shorts from bottom nav
-      function nukeShortsButton() {
-        // 1. Hide via CSS (instant)
+      // 1. INJECT GLOBAL CSS (works across shadow DOM)
+      function injectCSS() {
+        if (document.getElementById('kill-shorts-global')) return;
         const style = document.createElement('style');
-        style.id = 'nuke-shorts-css';
+        style.id = 'kill-shorts-global';
         style.textContent = \`
-          /* Bottom nav Shorts button */
-          a[href="/shorts"], 
+          /* GLOBAL HIDE SHORTS */
+          a[href="/shorts"],
+          a[href^="/shorts"],
           a[title="Shorts"],
-          yt-tab-shape:has(a[href*="/shorts"]),
-          ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]),
-          ytd-guide-entry-renderer:has(a[href*="/shorts"])
-          { 
-            display: none !important; 
+          [href*="/shorts"],
+          [title="Shorts"],
+          yt-tab-shape,
+          ytd-mini-guide-entry-renderer,
+          ytd-guide-entry-renderer,
+          tp-yt-paper-tab,
+          [role="tab"] {
+            contain: layout style !important;
+          }
+
+          a[href*="/shorts"],
+          [href*="/shorts"],
+          [title*="Shorts" i] {
+            display: none !important;
             visibility: hidden !important;
             width: 0 !important;
             height: 0 !important;
             opacity: 0 !important;
+            pointer-events: none !important;
+            transform: scale(0) !important;
           }
 
-          /* Optional: Rebalance bottom nav (centers remaining tabs) */
-          #tabs-container { justify-content: space-around !important; }
+          /* Fix spacing */
+          ytd-app[role="main"] > div > div {
+            justify-content: space-around !important;
+          }
         \`;
-        if (!document.getElementById('nuke-shorts-css')) {
-          document.head.appendChild(style);
-        }
+        document.head.appendChild(style);
+      }
 
-        // 2. Remove from DOM (backup)
-        document.querySelectorAll('yt-tab-shape').forEach(tab => {
-          if (tab.innerHTML.includes('shorts') || tab.querySelector('a[href*="/shorts"]')) {
-            tab.remove();
-          }
+      // 2. Traverse ALL shadow DOMs
+      function killShortsInShadow(root = document.body) {
+        // Direct matches
+        root.querySelectorAll('a[href*="/shorts"], [title*="Shorts" i]').forEach(el => {
+          const parent = el.closest('yt-tab-shape, ytd-mini-guide-entry-renderer, [role="tab"]');
+          if (parent) parent.style.display = 'none';
+          el.style.display = 'none';
         });
 
-        // 3. Rebuild bottom nav if YouTube regenerates it
-        const tabs = document.querySelector('#tabs-container');
-        if (tabs && tabs.children.length === 4) {
-          // If only 4 tabs left, re-center
-          tabs.style.justifyContent = 'space-around';
-        }
+        // Search inside shadow roots
+        root.querySelectorAll('*').forEach(el => {
+          if (el.shadowRoot) {
+            killShortsInShadow(el.shadowRoot);
+          }
+        });
       }
 
-      // Run every 300ms — YouTube can't stop this
-      const interval = setInterval(nukeShortsButton, 300);
+      // 3. Run aggressively
+      let count = 0;
+      const killer = setInterval(() => {
+        injectCSS();
+        killShortsInShadow();
+        count++;
+        if (count > 300) clearInterval(killer); // 30 seconds max
+      }, 100);
 
-      // Also run on DOM ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', nukeShortsButton);
-      } else {
-        nukeShortsButton();
-      }
+      // 4. On load
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          injectCSS();
+          killShortsInShadow();
+        }, 500);
+      });
 
-      // Run on navigation
-      let lastUrl = location.href;
-      const checkUrl = () => {
-        if (location.href !== lastUrl) {
-          lastUrl = location.href;
-          setTimeout(nukeShortsButton, 200);
-        }
-        requestAnimationFrame(checkUrl);
-      };
-      checkUrl();
-
-      // Redirect /shorts/ links
+      // 5. Redirect /shorts/
       document.addEventListener('click', e => {
         const a = e.target.closest('a');
-        if (a && a.href && a.href.includes('/shorts/')) {
+        if (a?.href?.includes('/shorts/')) {
           e.preventDefault();
           const id = a.href.split('/shorts/')[1].split('?')[0];
-          if (id) location.href = '/watch?v=' + id;
+          if (id) {
+            window.location.href = '/watch?v=' + id;
+          }
         }
       }, true);
 
-      // If on Shorts page, redirect
+      // 6. If already on Shorts
       if (location.pathname.startsWith('/shorts/')) {
         const id = location.pathname.split('/shorts/')[1].split('?')[0];
-        if (id) location.href = '/watch?v=' + id;
+        if (id) {
+          window.location.replace('/watch?v=' + id);
+        }
       }
 
-      // Never let the interval die
-      window.addEventListener('beforeunload', () => clearInterval(interval));
+      // 7. Debug
+      setTimeout(() => {
+        window.ReactNativeWebView?.postMessage('SHORTS_DEAD');
+      }, 3000);
+
     })();
     true;
   `;
+
+  const onMessage = (e: any) => {
+    if (e.nativeEvent.data === 'SHORTS_DEAD') {
+      console.log('SHORTS BUTTON MAR GAYA');
+    }
+  };
+
+  // Force reload
+  useEffect(() => {
+    const t = setTimeout(() => webViewRef.current?.reload(), 1500);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
         <StatusBar barStyle="light-content" />
 
-        {/* Back Button */}
         {canGoBack && (
           <View style={{ position: 'absolute', top: 50, left: 10, zIndex: 10 }}>
-            <Button
-              title="Back"
-              color="#ff4444"
-              onPress={() => webViewRef.current?.goBack()}
-            />
+            <Button title="Back" color="#ff4444" onPress={() => webViewRef.current?.goBack()} />
           </View>
         )}
 
@@ -121,17 +146,16 @@ export default function App() {
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
           startInLoadingState={true}
+          cacheEnabled={false}
+          cacheMode="LOAD_NO_CACHE"
           onNavigationStateChange={nav => setCanGoBack(nav.canGoBack)}
 
-          // CRITICAL: BOTH INJECTIONS
-          injectedJavaScriptBeforeContentLoaded={antiShortsScript}
-          injectedJavaScript={antiShortsScript}
+          // BOTH INJECTIONS
+          injectedJavaScriptBeforeContentLoaded={FINAL_KILL_SCRIPT}
+          injectedJavaScript={FINAL_KILL_SCRIPT}
 
-          // Prevent Android from ignoring script
-          onMessage={() => {}}
-
-          // Force reload on mount (optional)
-          key="youtube-webview"
+          onMessage={onMessage}
+          onError={(e) => console.warn('WebView Error:', e.nativeEvent)}
         />
       </SafeAreaView>
     </SafeAreaProvider>
